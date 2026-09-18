@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <style>
+        body{
+            font-family: Arial;
+            background:#0f172a;
+            color:#fff;
+        }
+        .container{
+            width:90%;
+            margin:auto;
+        }
+        table{
+            width:100%;
+            border-collapse:collapse;
+            margin-top:20px;
+            background:#111827;
+        }
+        th,td{
+            padding:12px;
+            border-bottom:1px solid #374151;
+            text-align:left;
+        }
+        th{
+            background:#1f2933;
+        }
+        .btn{
+            padding:6px 12px;
+            border:none;
+            cursor:pointer;
+            border-radius:4px;
+        }
+        .danger{
+            background:#dc2626;
+            color:white;
+        }
+        .badge{
+            padding:4px 8px;
+            border-radius:4px;
+            font-size:12px;
+        }
+        .admin{
+            background:#16a34a;
+        }
+        .user{
+            background:#2563eb;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>👑 Admin Dashboard</h2>
+    <p>Total Users: {{ users|length }}</p>
+
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Action</th>
+        </tr>
+
+        {% for u in users %}
+        <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.username }}</td>
+            <td>
+                {% if u.is_admin %}
+                    <span class="badge admin">Admin</span>
+                {% else %}
+                    <span class="badge user">User</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if not u.is_admin %}
+                <form method="POST" action="{{ url_for('delete_user', user_id=u.id) }}"
+                      onsubmit="return confirm('Delete user?');">
+                    <button class="btn danger">Delete</button>
+                </form>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+</body>
+</html>

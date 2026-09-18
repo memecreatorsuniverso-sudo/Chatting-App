@@ -1,0 +1,378 @@
+<!-- templates/chat.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Random Chat</title>
+  <style>
+    :root{
+      --bg: linear-gradient(135deg,#0f0c29,#302b63,#24243e);
+      --text: #fff;
+      --card: rgba(255,255,255,0.06);
+    }
+    body.light{
+      --bg: linear-gradient(135deg,#f4f7fb,#eef2f6,#e8ebef);
+      --text:#111;
+      --card: rgba(0,0,0,0.06);
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:0;
+      font-family: Inter,system-ui,Arial;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .container{width:920px; max-width:96%; padding:24px;}
+    .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;}
+    .title{font-weight:700; font-size:20px; display:flex; align-items:center;}
+    .controls{display:flex; gap:10px; align-items:center;}
+    .badge{background:#28c76f;color:#fff;padding:6px 10px;border-radius:10px;font-weight:600;}
+    .theme-btn{cursor:pointer;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.08);color:var(--text);border:none;}
+    .card{background: var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.2);height:360px;display:flex;flex-direction:column;overflow:hidden;}
+    .status{text-align:center;margin-bottom:10px;font-size:14px;}
+    .controls-row{display:flex;gap:10px;justify-content:center;margin-bottom:10px;}
+    .btn{padding:10px 16px;border-radius:10px;border:none;cursor:pointer;background:#5865f2;color:#fff;font-weight:600;}
+    .btn.alt{background:#e74c3c;}
+    .chat-wrapper{flex:1;min-height:0;display:flex;flex-direction:column;}
+    #chat-box{flex:1;min-height:0;overflow-y:auto;padding:8px;border-radius:8px;background:rgba(0,0,0,0.06);}
+    #typingIndicator{flex-shrink:0;text-align:center;font-size:13px;opacity:0.7;margin:4px 0;}
+    .msg{max-width:35%;margin:8px 0;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.06);word-wrap:break-word;}
+    .mine{margin-left:auto;background:#5865f2;color:#fff;}
+    .meta{font-size:12px;opacity:0.8;margin-bottom:4px;}
+    .input-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-shrink:0;}
+    input[type="text"]{flex:1;padding:10px 12px;border-radius:10px;border:none;outline:none;}
+    .small-muted{font-size:12px;opacity:0.85;text-align:center;margin-top:6px;}
+    .logo{height:140px;width:auto;}
+    .friends-panel{position:fixed;left:10px;top:10px;width:220px;height:90vh;background:var(--card);border-radius:12px;padding:12px;overflow-y:auto;}
+    .friends-panel h3{margin:8px 0;font-size:14px;opacity:0.8;}
+    .friend-item,.request-item{padding:8px;background:rgba(255,255,255,0.06);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:14px;}
+    .friend-item button,.request-item button{font-size:12px;padding:4px 6px;border:none;border-radius:6px;cursor:pointer;}
+  </style>
+  <style>
+#notifyBox{
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+}
+
+.notify{
+  min-width: 240px;
+  margin-bottom: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  animation: slideIn 0.3s ease;
+}
+
+.notify.success{ background: #2ecc71; }
+.notify.error{ background: #e74c3c; }
+.notify.info{ background: #3498db; }
+
+@keyframes slideIn{
+  from{ transform: translateX(100%); opacity: 0; }
+  to{ transform: translateX(0); opacity: 1; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <div class="title">
+      <img src="static/logo/f1.png" alt="Flames Logo" class="logo">
+    </div>
+    {% if current_user.is_admin %}
+      <a href="/admin" style="color:red;">Admin Panel</a>
+    {% endif %}
+    <div class="controls">
+      <div class="badge" id="onlineCount">0 users online</div>
+      <button id="themeToggle" class="theme-btn">🌙</button>
+      <a href="{{ url_for('logout') }}" class="btn alt" style="margin-left:10px;">Logout</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="status" id="statusText">Press <b>Start</b> to find a partner</div>
+
+    <div class="controls-row">
+      <button id="startBtn" class="btn">Start</button>
+      <button id="stopBtn" class="btn alt" style="display:none">Stop</button>
+      <button id="leaveBtn" class="btn btn-danger" style="display:none;">Leave Chat</button>
+<!--      <button id="addFriendBtn" class="btn" style="display:none;">➕ Add Friend</button>-->
+    </div>
+
+    <div id="chat-box" aria-live="polite"></div>
+    <div id="typingIndicator"></div>
+
+    <div class="input-row">
+      <button id="attachBtn" class="btn">📎</button>
+      <input type="file" id="fileInput" style="display:none;" />
+      <input id="msgInput" type="text" placeholder="Type a message..." disabled />
+      <button id="sendBtn" class="btn" disabled>Send</button>
+    </div>
+
+    <div class="small-muted">You are connected as <b>{{ username }}</b></div>
+  </div>
+</div>
+<div id="notifyBox"></div>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const username = {{ username|tojson|safe }};
+const socket = io();
+
+// DOM elements
+const onlineCountEl = document.getElementById("onlineCount");
+const statusText = document.getElementById("statusText");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const chatBox = document.getElementById("chat-box");
+const msgInput = document.getElementById("msgInput");
+const sendBtn = document.getElementById("sendBtn");
+const themeToggle = document.getElementById("themeToggle");
+const typingEl = document.getElementById("typingIndicator");
+const leaveBtn = document.getElementById("leaveBtn");
+const attachBtn = document.getElementById("attachBtn");
+const fileInput = document.getElementById("fileInput");
+const addFriendBtn = document.getElementById("addFriendBtn");
+const friendsList = document.getElementById("friendsList");
+const requestsList = document.getElementById("requestsList");
+
+// STATE
+let currentRoom = null;
+let partner = null;
+let partnerId = null;
+let searching = false;
+
+// HELPERS
+function appendMessage(sender, text, mine=false){
+  const div = document.createElement("div");
+  div.className = "msg " + (mine ? "mine" : "other");
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerText = `${sender} • ${new Date().toLocaleTimeString()}`;
+  const body = document.createElement("div");
+  body.innerText = text;
+  div.appendChild(meta);
+  div.appendChild(body);
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function appendFileMessage(sender, filename, mine=false){
+  const div = document.createElement("div");
+  div.className = "msg " + (mine ? "mine" : "other");
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerText = `${sender} • ${new Date().toLocaleTimeString()}`;
+  const body = document.createElement("div");
+  if(/\.(jpg|jpeg|png|gif|webp)$/i.test(filename)){
+    body.innerHTML = `<img src="/uploads/${filename}" style="max-width:200px;border-radius:10px">`;
+  } else {
+    body.innerHTML = `<a href="/uploads/${filename}" download>${filename}</a>`;
+  }
+  div.appendChild(meta);
+  div.appendChild(body);
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function setSearching(val){
+  searching = val;
+  startBtn.style.display = val ? "none" : "block";
+  stopBtn.style.display = val ? "block" : "none";
+  leaveBtn.style.display = (!val && currentRoom) ? "block" : "none";
+  if(val){
+    statusText.innerHTML = "Searching for a partner...";
+    msgInput.disabled = true;
+    sendBtn.disabled = true;
+  } else if(!currentRoom){
+    statusText.innerHTML = `Press <b>Start</b> to find a partner`;
+  }
+}
+
+// SOCKET EVENTS
+socket.on("connect", () => console.log("Connected"));
+socket.on("online_count", data => onlineCountEl.innerText = `${data.count ?? 0} users online`);
+socket.on("waiting", data => setSearching(true));
+socket.on("matched", data => {
+  partner = data.partner;
+  partnerId = data.partner_id;
+  currentRoom = data.room;
+  addFriendBtn.style.display = "block";
+  setSearching(false);
+  msgInput.disabled = false;
+  sendBtn.disabled = false;
+  leaveBtn.style.display = "block";
+  statusText.innerHTML = `Connected with <b>${partner}</b>`;
+  appendMessage("System", "You are now connected. Say hi!");
+});
+socket.on("partner_left", () => {
+  appendMessage("System", "Your partner left.");
+  partner = currentRoom = partnerId = null;
+  addFriendBtn.style.display = "none";
+  msgInput.disabled = true;
+  sendBtn.disabled = true;
+  leaveBtn.style.display = "none";
+  statusText.innerHTML = "Partner left. Press <b>Start</b> to search again.";
+});
+socket.on("typing", data => {
+  if(data.user !== username){
+    typingEl.innerText = `${data.user} is typing...`;
+    clearTimeout(window._typing);
+    window._typing = setTimeout(() => typingEl.innerText = "", 1500);
+  }
+});
+socket.on("new_message", data => {
+  const mine = data.sender === username;
+  if(data.is_file) appendFileMessage(data.sender, data.file_name, mine);
+  else appendMessage(data.sender, data.message, mine);
+});
+socket.on("private_chat_opened", data => {
+  currentRoom = data.room;
+  chatBox.innerHTML = "";
+  msgInput.disabled = false;
+  sendBtn.disabled = false;
+});
+socket.on("friend_request", data => {
+  alert(`New friend request from ${data.from}`);
+  loadFriends();
+});
+
+// UI EVENTS
+startBtn.addEventListener("click", () => {
+  chatBox.innerHTML = "";
+  socket.emit("start_search", { username });
+  setSearching(true);
+});
+stopBtn.addEventListener("click", () => {
+  socket.emit("stop_search");
+  setSearching(false);
+  partner = currentRoom = null;
+  appendMessage("System", "Stopped searching.");
+});
+leaveBtn.addEventListener("click", () => {
+  if(!currentRoom) return;
+  socket.emit("leave_chat", { room: currentRoom });
+  appendMessage("System", "You left the chat.");
+  partner = currentRoom = null;
+  msgInput.disabled = true;
+  sendBtn.disabled = true;
+  leaveBtn.style.display = "none";
+  statusText.innerHTML = `Press <b>Start</b> to find a partner`;
+});
+sendBtn.addEventListener("click", () => {
+  const text = msgInput.value.trim();
+  if(!text || !currentRoom) return;
+  socket.emit("send_message", { room: currentRoom, message: text });
+  msgInput.value = "";
+});
+msgInput.addEventListener("keydown", e => { if(e.key === "Enter") { sendBtn.click(); e.preventDefault(); } });
+msgInput.addEventListener("input", () => { if(currentRoom) socket.emit("typing", { room: currentRoom }); });
+
+attachBtn.addEventListener("click", () => { if(!currentRoom) return alert("Start chat first!"); fileInput.click(); });
+fileInput.addEventListener("change", () => {
+  if(!currentRoom) return alert("Join a room first!");
+  const file = fileInput.files[0];
+  if(!file) return;
+  const formData = new FormData();
+  formData.append("file", file);
+  fetch("/upload", { method:"POST", body:formData })
+    .then(res => res.json())
+    .then(data => socket.emit("send_file", { room: currentRoom, file_name: data.filename }))
+    .catch(err => console.error("UPLOAD ERROR:", err));
+  fileInput.value = "";
+});
+
+themeToggle.addEventListener("click", () => {
+  const light = document.body.classList.toggle("light");
+  themeToggle.textContent = light ? "☀️" : "🌙";
+  localStorage.setItem("chat_theme", light ? "light" : "dark");
+});
+if(localStorage.getItem("chat_theme") === "light"){document.body.classList.add("light"); themeToggle.textContent = "☀️";}
+
+// FRIEND LOGIC
+addFriendBtn.addEventListener("click", ()=> {
+  if(!partnerId){
+    notify("⚠️ Partner not found", "error");
+    return;
+  }
+
+  fetch(`/send_request/${partnerId}`, { method:"POST" })
+    .then(r => r.json())
+    .then(d => {
+      if(d.success){
+        notify("✅ Friend request sent", "success");
+      } else {
+        notify("⚠️ " + d.error, "error");
+      }
+    });
+});
+
+function loadFriends(){
+  fetch("/friends_data").then(res => res.json()).then(data => {
+    friendsList.innerHTML = "";
+    requestsList.innerHTML = "";
+    data.friends.forEach(f => {
+      friendsList.innerHTML += `
+        <div class="friend-item">
+          ${f.username}
+          <button onclick="openPrivateChat(${f.id}, '${f.username}')">Chat</button>
+          <button onclick="unfriend(${f.id})">Unfriend</button>
+        </div>`;
+    });
+    data.requests.forEach(r => {
+      requestsList.innerHTML += `
+        <div class="request-item">
+          ${r.username}
+          <div>
+            <button onclick="acceptReq(${r.req_id})">✔</button>
+            <button onclick="rejectReq(${r.req_id})">✖</button>
+          </div>
+        </div>`;
+    });
+  });
+}
+function acceptReq(id){
+  fetch(`/accept_request/${id}`, {method:"POST"})
+    .then(() => {
+      notify("✅ Friend request accepted", "success");
+      loadFriends();
+    });
+}
+function rejectReq(id){
+  fetch(`/reject_request/${id}`, {method:"POST"})
+    .then(() => {
+      notify("❌ Friend request rejected", "info");
+      loadFriends();
+    });
+}
+function unfriend(id){ fetch(`/unfriend/${id}`, {method:"POST"}).then(loadFriends); }
+
+function openPrivateChat(userId, userName){
+  socket.emit("open_private_chat", { user_id: userId });
+  statusText.innerHTML = `Chat with <b>${userName}</b>`;
+}
+function notify(message, type="info"){
+  const box = document.getElementById("notifyBox");
+  const div = document.createElement("div");
+
+  div.className = "notify " + type;
+  div.innerText = message;
+
+  box.appendChild(div);
+
+  setTimeout(() => {
+    div.remove();
+  }, 3000);
+}
+loadFriends();
+setInterval(loadFriends, 5000);
+</script>
+</body>
+</html>
